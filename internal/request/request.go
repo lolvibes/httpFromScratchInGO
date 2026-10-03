@@ -1,8 +1,9 @@
 package request
 
 import (
+	"fmt"
 	"io"
-	"unicode"
+	"strings"
 )
 
 // Request represent the full parsed Http request
@@ -10,67 +11,74 @@ type Request struct {
 	RequestLine RequestLine
 }
 type RequestLine struct {
-	HTTPversion    string
-	RequestTargert string
-	Method         string
+	HttpVersion   string
+	RequestTarget string
+	Method        string
 }
 
+// escaping the pointer value aren't dead
 func RequestFromReader(reader io.Reader) (*Request, error) {
-	req, err := io.ReadAll(reader)
-	var httpMessage Request
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
 
-	PareseRequestLine(req, &httpMessage)
-
-	return &httpMessage
+	rl, err := PareseRequestLine(string(data[:]))
+	if err != nil {
+		return nil, err
+	}
+	// composit literal
+	return &Request{RequestLine: rl}, nil
 }
 
-func PareseRequestLine(req []byte, httpMessage *Request) {
-	var j int = 0
-	for i := range string(req) {
-		if string(req[i]) == " " {
-			method := string(req[j:i])
-			switch method {
-			case "Get":
-				httpMessage.RequestLine.Method = method
-			case "POST":
-				httpMessage.RequestLine.Method = method
+func PareseRequestLine(data string) (RequestLine, error) {
+	parts := strings.Split(data, "\r\n")
 
-			case "PUT":
-				httpMessage.RequestLine.Method = method
-
-			case "DELETE":
-				httpMessage.RequestLine.Method = method
-
-			case "HEAD":
-				httpMessage.RequestLine.Method = method
-
-			case "OPTIONS":
-				httpMessage.RequestLine.Method = method
-
-			case "TRACE":
-				httpMessage.RequestLine.Method = method
-
-			case "CONNECT":
-				httpMessage.RequestLine.Method = method
-			default:
-				httpMessage.RequestLine.Method = ""
-			}
-			if string(req[i]) == "/" {
-				for k := i; k < len(req); k++ {
-					if string(req[k]) == " " {
-						httpMessage.RequestLine.RequestTargert = string(req[i:k])
-					}
-				}
-			}
-
-		}
-
-		if string(req[i]) == "" {
-			httpMessage.RequestLine.Method = ""
-		}
-		r := rune(req[i])
-		if unicode.IsLower(r) {
-			httpMessage.RequestLine.Method = ""
-		}
+	reqLine := parts[0]
+	rqSlice := strings.Split(reqLine, " ")
+	if len(rqSlice) != 3 {
+		fmt.Errorf("bad req nedded 3 parts gave %d", len(rqSlice))
 	}
+	v := make(map[int]string)
+	for i, l := range rqSlice {
+		v[i] = l
+	}
+	var rl RequestLine
+	method := v[0]
+	switch method {
+	case "GET":
+		rl.Method = method
+	case "POST":
+		rl.Method = method
+
+	case "PUT":
+		rl.Method = method
+
+	case "DELETE":
+		rl.Method = method
+
+	case "HEAD":
+		rl.Method = method
+
+	case "OPTIONS":
+		rl.Method = method
+	case "TRACE":
+		rl.Method = method
+
+	case "CONNECT":
+		rl.Method = method
+
+	default:
+		return RequestLine{}, fmt.Errorf("invalid method %s", method)
+	}
+	reqTarget := v[1]
+	if reqTarget[0] == '/' {
+		rl.RequestTarget = reqTarget
+	}
+	httpversion := v[2]
+	if httpversion != "HTTP/1.1" {
+		return RequestLine{}, nil
+	}
+	rl.HttpVersion = strings.TrimPrefix(httpversion, "HTTP/")
+	return rl, nil
 }
