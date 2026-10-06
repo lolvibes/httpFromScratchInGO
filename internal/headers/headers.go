@@ -13,22 +13,21 @@ func NewHeaders() Headers {
 
 func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	idx := bytes.Index(data, []byte("\r\n"))
-	if idx == 0 { // this means we just got zero headers
-		return 0, true, nil
+	if idx == -1 {
+		return 0, false, nil // need data no full line yet
 	}
-
-	parts := bytes.Split(data, []byte("\r\n")) // this gives the n number of headers
-	// check or all the headers is those are valid or not
-	for _, data2 := range parts {
-		subParts := bytes.Split(data2, []byte(":"))
-		for i, subdata := range subParts {
-			if bytes.Contains(subdata, []byte(" ")) { // not thats the invalid headers
-				return 0, false, fmt.Errorf("invalid header , header : %s", string(subdata))
-			}
-			subdata = append(subdata, ':')
-			h[string(subParts[i])] = string(subParts[i+1])
-			break
-		}
-
+	if idx == 0 {
+		return 2, true, nil // no header to parse
 	}
+	line := data[:idx]
+	hname, hvalue, found := bytes.Cut(line, []byte(":"))
+	if !found {
+		return 0, false, fmt.Errorf("malformed header: no colon in %q", line)
+	}
+	hname = bytes.TrimLeft(hname, " ")
+	if len(hname) == 0 || bytes.Contains(hname, []byte(" ")) {
+		return 0, false, fmt.Errorf("invalid header name %q", hname)
+	}
+	h[string(hname)] = string(bytes.TrimSpace(hvalue))
+	return idx + 2, false, nil
 }
