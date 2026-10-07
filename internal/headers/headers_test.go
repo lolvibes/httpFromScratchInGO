@@ -41,4 +41,17 @@ func TestHeaderParese(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, 0, n)
 	assert.False(t, done)
+	// Test: same header twice
+	headers = NewHeaders()
+	data = []byte("Set-Person: lane-loves-go\r\nSet-Person: prime-loves-zig\r\n\r\n")
+	read := 0
+	for {
+		n, d, err := headers.Parse(data[read:])
+		require.NoError(t, err)
+		read += n
+		if d {
+			break
+		}
+	}
+	assert.Equal(t, "lane-loves-go, prime-loves-zig", headers["set-person"])
 }

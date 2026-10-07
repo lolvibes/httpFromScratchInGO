@@ -47,6 +47,11 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 
 	hnameStr := string(hname)
 	hnameStr = strings.ToLower(hnameStr)
-	h[hnameStr] = string(bytes.TrimSpace(hvalue))
+	hvalueStr := string(bytes.TrimSpace(hvalue))
+	if existing, ok := h[hnameStr]; ok {
+		h[hnameStr] = existing + ", " + hvalueStr
+	} else {
+		h[hnameStr] = hvalueStr
+	}
 	return idx + 2, false, nil
 }
