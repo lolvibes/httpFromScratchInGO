@@ -3,6 +3,7 @@ package request
 import (
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.httpfromtcp/internal/headers"
@@ -13,6 +14,7 @@ type parseState int
 const (
 	stateint parseState = iota
 	stateHeaders
+	statebody
 	stateDone
 )
 
@@ -20,6 +22,7 @@ const (
 type Request struct {
 	RequestLine RequestLine
 	Headers     headers.Headers
+	Body        []byte
 	state       parseState
 }
 type RequestLine struct {
@@ -155,9 +158,35 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 			return 0, err
 		}
 		if done {
-			r.state = stateDone
+			cl, ok := r.Headers["content-length"]
+			if !ok {
+				r.state = stateDone
+			} else {
+				length, err := strconv.Atoi(cl)
+				if err != nil || length < 0 {
+					return 0, fmt.Errorf("invalid content lenght  %q", cl)
+				}
+				if length == 0 {
+					r.state = stateDone
+				} else {
+					r.state = statebody
+				}
+			}
 		}
 		return n, nil
+	case statebody:
+		length, err := strconv.Atoi(r.Headers["content-length"])
+		if err != nil {
+			return 0, fmt.Errorf("invalid content-length %q ")
+		}
+		remaining := length - len(r.Body)
+		take := min(remaining, len(data))
+		r.Body = append(r.Body, data[:take]...)
+		if len(r.Body) == length {
+			r.state = stateDone
+		}
+
+		return take, nil
 	default:
 		return 0, fmt.Errorf("parser called unfimiliar state %d", r.state)
 
