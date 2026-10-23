@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 	"sync/atomic"
+
+	"github.httpfromtcp/internal/response"
 )
 
 type stateofserver int
@@ -40,12 +42,16 @@ func (s *Server) Listen() {
 
 func (s *Server) handel(conn net.Conn) {
 	defer conn.Close()
-	resp := "HTTP/1.1 200 OK\r\n" +
-		"Content-Type: text/plain\r\n" +
+	body := "hello world!\n"
+	if err := response.WriteStatusLine(conn, response.ServerOk); err != nil {
+		return
+	}
+	h := response.GetDefaultHeaders(len(body))
+	if err := response.WriteHeaders(conn, h); err != nil {
+		return
+	}
 
-		"\r\n" +
-		"Hello World!\n"
-	conn.Write([]byte(resp))
+	conn.Write([]byte(body))
 }
 
 func Serv(port int) (*Server, error) {
