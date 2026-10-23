@@ -4,12 +4,23 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.httpfromtcp/internal/headers"
+)
+
+type parseState int
+
+const (
+	stateint parseState = iota
+	stateHeaders
+	stateDone
 )
 
 // Request represent the full parsed Http request
 type Request struct {
 	RequestLine RequestLine
-	state       int // 0 is for parsing  when 1 its done
+	Headers     headers.Headers
+	state       parseState
 }
 type RequestLine struct {
 	HttpVersion   string
@@ -22,9 +33,12 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	// trying to read from buffer
 	buf := make([]byte, 8)
 	readToIdx := 0
-	req := &Request{}
+	req := &Request{
+		state:   stateint,
+		Headers: headers.NewHeaders(),
+	}
 	//	data, err := io.ReadAll(reader)
-	for req.state != 1 {
+	for req.state != stateDone {
 		if readToIdx == len(buf) {
 			bigbuf := make([]byte, len(buf)*2)
 			copy(bigbuf, buf[:readToIdx])
@@ -108,8 +122,23 @@ func PareseRequestLine(data string) (RequestLine, error, int) {
 }
 
 func (r *Request) parse(data []byte) (int, error) {
+	total := 0
+	for r.state != stateDone {
+		n, err := r.parseSingle(data[total:])
+		if err != nil {
+			return 0, nil
+		}
+		if n == 0 {
+			break
+		}
+		total += n
+	}
+	return total, nil
+}
+
+func (r *Request) parseSingle(data []byte) (int, error) {
 	switch r.state {
-	case 0:
+	case stateint:
 		rl, err, n := PareseRequestLine(string(data))
 		if err != nil {
 			return 0, err
@@ -118,7 +147,16 @@ func (r *Request) parse(data []byte) (int, error) {
 			return 0, nil
 		}
 		r.RequestLine = rl
-		r.state = 1
+		r.state = stateHeaders
+		return n, nil
+	case stateHeaders:
+		n, done, err := r.Headers.Parse(data)
+		if err != nil {
+			return 0, err
+		}
+		if done {
+			r.state = stateDone
+		}
 		return n, nil
 	default:
 		return 0, fmt.Errorf("parser called unfimiliar state %d", r.state)

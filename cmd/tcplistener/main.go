@@ -28,9 +28,15 @@ func main() {
 		//}
 		req, err := request.RequestFromReader(conn)
 		if err != nil {
-			fmt.Errorf("don't know what happened", err)
+			fmt.Printf("don't know what happened", err)
+			conn.Close()
+			continue
 		}
-		fmt.Printf("Request line :\n -Method: %s\n -Target: %s\n -Version:%s", req.RequestLine.Method, req.RequestLine.RequestTarget, req.RequestLine.HttpVersion)
+		fmt.Printf("Request line :\n \t -Method: %s\n \t-Target: %s\n \t-Version:%s \n Headers: \n", req.RequestLine.Method, req.RequestLine.RequestTarget, req.RequestLine.HttpVersion)
+		for key, value := range req.Headers {
+			fmt.Printf("- %s: %s\n", key, value)
+		}
+		conn.Close()
 
 	}
 }
