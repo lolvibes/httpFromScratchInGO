@@ -1,10 +1,13 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"net"
 	"sync/atomic"
 
+	"github.httpfromtcp/internal/request"
 	"github.httpfromtcp/internal/response"
 )
 
@@ -15,10 +18,22 @@ const (
 	statedone
 )
 
+type HandleError struct {
+	StatusCode response.StatusCode
+	Message    string
+}
+
+func (he *HandleError) Write(w io.Writer) {
+	response.WriteStatusLine(w, he.StatusCode)
+	response.WriteHeaders(w, response.GetDefaultHeaders(len(he.Message)))
+	w.Write([]byte(he.Message))
+}
+
 type Server struct {
 	Stateofserver stateofserver
 	listene       net.Listener
 	closed        atomic.Bool
+	handler       Handler
 }
 
 func (s *Server) Close() error {
@@ -40,27 +55,49 @@ func (s *Server) Listen() {
 	}
 }
 
+type Handler func(w io.Writer, req *request.Request) *HandleError
+
 func (s *Server) handel(conn net.Conn) {
 	defer conn.Close()
-	body := "hello world!\n"
-	if err := response.WriteStatusLine(conn, response.ServerOk); err != nil {
+	//body := "hello world!\n"
+	//if err := response.WriteStatusLine(conn, response.ServerOk); err != nil {
+	//	return
+	//}
+	//h := response.GetDefaultHeaders(len(body))
+	//if err := response.WriteHeaders(conn, h); err != nil {
+	//	return
+	//}
+	req, err := request.RequestFromReader(conn)
+	if err != nil {
+		hrr := &HandleError{
+			response.BadReq,
+			err.Error(),
+		}
+		hrr.Write(conn)
 		return
 	}
-	h := response.GetDefaultHeaders(len(body))
-	if err := response.WriteHeaders(conn, h); err != nil {
+	buf := bytes.NewBuffer([]byte{})
+	hrr := s.handler(buf, req)
+	if hrr != nil {
+		hrr.Write(conn)
 		return
 	}
-
-	conn.Write([]byte(body))
+	b := buf.Bytes()
+	response.WriteStatusLine(conn, response.ServerOk)
+	headers := response.GetDefaultHeaders(len(b))
+	response.WriteHeaders(conn, headers)
+	conn.Write(b)
+	return
 }
 
-func Serv(port int) (*Server, error) {
+func Serv(h Handler, port int) (*Server, error) {
 	var serv Server
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return nil, err
 	}
 	serv.listene = ln
+	serv.handler = h
 	go serv.Listen()
 	return &serv, nil
 }
